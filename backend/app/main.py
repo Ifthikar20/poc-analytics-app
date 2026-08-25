@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 
 from .bus import SnapshotBus
 from .config import FRONTEND_DIST, STATIC_DIR, load_settings, validate
@@ -55,10 +56,35 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Realtime Traffic Tracker PoC", lifespan=lifespan)
 
+
+class SecurityHeadersMiddleware:
+    """Baseline response headers. Pure ASGI (no response buffering) so the SSE
+    stream passes through untouched."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-Frame-Options"] = "DENY"
+                headers["Referrer-Policy"] = "same-origin"
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 # CORS is only needed when tracker.js is embedded on an external client site.
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"]
 )
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.get("/api/snapshot")
@@ -99,12 +125,25 @@ async def stream(request: Request) -> StreamingResponse:
     )
 
 
+MAX_BEACON_BYTES = 4096
+
+
 @app.post("/api/track", status_code=204)
 async def track(request: Request) -> Response:
     # tracker.js sends a plain-text body (a CORS "simple request" — no preflight).
+    # Cap the size before buffering so oversized posts can't balloon memory;
+    # a legitimate beacon is ~200 bytes.
+    declared = request.headers.get("content-length", "0")
+    if declared.isdigit() and int(declared) > MAX_BEACON_BYTES:
+        return Response(status_code=413)
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_BEACON_BYTES:
+            return Response(status_code=413)
     try:
-        data = json.loads((await request.body()) or b"{}")
-    except json.JSONDecodeError:
+        data = json.loads(body or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
         data = {}
     if not isinstance(data, dict):
         data = {}

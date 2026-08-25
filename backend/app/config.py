@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,12 @@ FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 VALID_PROVIDERS = ("mock", "ga4", "cloudflare")
+
+# Strict formats: catches typos early, and (defense in depth) guarantees the
+# measurement id is inert when substituted into demo-page HTML.
+_MEASUREMENT_ID_RE = re.compile(r"^G-[A-Z0-9]{4,20}$")
+_PROPERTY_ID_RE = re.compile(r"^[0-9]{1,20}$")
+_ZONE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 @dataclass(frozen=True)
@@ -59,10 +66,20 @@ def validate(settings: Settings) -> None:
         raise RuntimeError(
             f"ANALYTICS_PROVIDER={settings.provider!r} must be one of: {', '.join(VALID_PROVIDERS)}"
         )
+    if settings.ga4_measurement_id and not _MEASUREMENT_ID_RE.match(settings.ga4_measurement_id):
+        raise RuntimeError(
+            "GA4_MEASUREMENT_ID must look like G-XXXXXXXXXX (uppercase letters/digits). "
+            "It is substituted into demo-page HTML, so malformed values are rejected outright."
+        )
     if settings.provider == "ga4":
         if not settings.ga4_property_id:
             raise RuntimeError(
                 "ANALYTICS_PROVIDER=ga4 requires GA4_PROPERTY_ID (the numeric property id)"
+            )
+        if not _PROPERTY_ID_RE.match(settings.ga4_property_id):
+            raise RuntimeError(
+                "GA4_PROPERTY_ID must be the numeric property id (digits only), "
+                "not a G-… measurement id"
             )
         if not settings.google_credentials_path:
             raise RuntimeError(
@@ -85,3 +102,5 @@ def validate(settings: Settings) -> None:
                 "ANALYTICS_PROVIDER=cloudflare requires CF_ZONE_ID "
                 "(the zone tag shown on the Cloudflare dashboard's zone Overview)"
             )
+        if not _ZONE_ID_RE.match(settings.cf_zone_id):
+            raise RuntimeError("CF_ZONE_ID must be the 32-character hex zone tag")

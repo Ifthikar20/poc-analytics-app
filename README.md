@@ -53,6 +53,11 @@ top_countries, notes}` and the UI never cares where the numbers came from.
 Switch with `ANALYTICS_PROVIDER` in `.env` (copy `.env.example`). Demo mode is
 the default and needs nothing.
 
+> Deep dive: **[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)** walks through every
+> vendor connection click-by-click (GA4 service account, Cloudflare token,
+> roadmap vendors), the cautions per vendor, and a full security review of
+> `tracker.js` and the backend surface (XSS, CSRF, spam, DoS, supply chain).
+
 ### 1. `mock` — local demo (default)
 
 The demo site at `/demo` carries the same one-line snippet a real client would
