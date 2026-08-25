@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Rockets — Home</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+  .banner { background: #fef3c7; border-bottom: 1px solid #fcd34d; padding: 10px 24px; font-size: 14px; color: #78350f; }
+  .banner a { color: #92400e; }
+  nav { display: flex; gap: 20px; padding: 16px 24px; background: #fff; border-bottom: 1px solid #e2e8f0; }
+  nav a { color: #0f172a; text-decoration: none; font-weight: 600; }
+  nav a.active { color: #0284c7; }
+  main { max-width: 720px; margin: 48px auto; padding: 0 24px; }
+  h1 { font-size: 40px; margin: 0 0 8px; }
+  p { line-height: 1.6; color: #334155; }
+  .cta { display: inline-block; margin-top: 16px; background: #0284c7; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="banner">🛰️ This fake site is being <strong>tracked</strong>. Open the <a href="/" target="_blank">live dashboard</a>, then open this page in more tabs and watch the counter move within seconds.</div>
+<nav>
+  <a href="/demo" class="active">Home</a>
+  <a href="/demo/pricing">Pricing</a>
+  <a href="/demo/about">About</a>
+</nav>
+<main>
+  <h1>Acme Rockets 🚀</h1>
+  <p>Sub-orbital parcel delivery for the impatient. This is a pretend customer website used to demonstrate the realtime traffic tracker: every page load here fires the one-line tracking snippet at the bottom of the HTML.</p>
+  <p>Click around the nav — each page view shows up in the dashboard's per-minute chart and top-pages list.</p>
+  <a class="cta" href="/demo/pricing">See pricing</a>
+</main>
+<script defer src="/tracker.js" data-site="demo-site"__GA4_ATTR__></script>
+</body>
+</html>

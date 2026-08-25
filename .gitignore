@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+
+# Local config & secrets
+.env
+*.sa.json
+service-account*.json
+ga4-service-account.json
