@@ -67,6 +67,21 @@ paste:
 <script defer src="https://YOUR-POC-HOST/tracker.js" data-site="acme-prod"></script>
 ```
 
+For production, pin the immutable versioned URL with a Subresource Integrity
+hash so a compromised host can't silently swap the script (hash command is in
+the tracker's header comment):
+
+```html
+<script defer src="https://YOUR-POC-HOST/tracker.v1.js"
+        integrity="sha384-…" crossorigin="anonymous"
+        data-site="acme-prod"></script>
+```
+
+The tracker fails safe by design: it never throws into the host page, runs
+once in the top frame only, beacons over HTTPS only, sends the referrer's
+origin (never full URLs), and sends nothing at all for visitors with Do Not
+Track or Global Privacy Control enabled.
+
 `tracker.js` beacons each pageview (`sendBeacon`, `text/plain` body → no CORS
 preflight) to `POST /api/track`, which appends it to an in-memory 30-minute
 rolling window mimicking GA4 realtime semantics (active users = unique visitor

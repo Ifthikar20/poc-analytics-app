@@ -459,10 +459,15 @@ Everything it does:
 | Behavior | Security property |
 |---|---|
 | `document.currentScript` + `new URL(script.src).origin` | Backend origin is derived from where the script was *actually loaded from* — it cannot be redirected by page content. |
-| Reads `data-site` / `data-ga4` attributes | Attacker-controlled only by someone who can already edit the page's HTML — who could simply write their own `<script>` instead. No privilege gained. |
+| Reads `data-site` / `data-ga4` attributes | Attacker-controlled only by someone who can already edit the page's HTML — who could simply write their own `<script>` instead. No privilege gained. `data-ga4` is additionally format-checked client-side (`^G-[A-Z0-9]{4,20}$`, mirroring the server) — gtag is not injected otherwise; `site`/`path` are truncated client-side to the server's limits. |
 | `sessionStorage` visitor id (`crypto.randomUUID`) | Random UUID, **per tab**, dies with the tab. Not a cookie, not readable cross-site, no fingerprinting inputs. Wrapped in try/catch (Safari private mode throws). |
 | gtag injection: `g.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(ga4)` | Host is **hard-coded**; the id is URL-encoded so it cannot smuggle a different host, path, or extra params. |
-| `navigator.sendBeacon(origin + "/api/track", jsonString)` (+`fetch` fallback) | Plain-string body ⇒ `text/plain` ⇒ CORS "simple request". Fire-and-forget; response is never read, so nothing from the backend flows back into the page. |
+| `navigator.sendBeacon(origin + "/api/track", jsonString)` (+`fetch` fallback) | Plain-string body ⇒ `text/plain` ⇒ CORS "simple request". Fire-and-forget; response is never read, so nothing from the backend flows back into the page. HTTPS-only (localhost excepted for dev) — never beacons in cleartext. |
+| Whole script inside `try/catch`, `"use strict"` | A failure in the tracker can never break the page hosting it. |
+| Run-once guard + top-frame check | A twice-pasted tag counts once; iframes are never counted (`window.top !== window.self` exits). |
+| Honors DNT + GPC (`navigator.doNotTrack`, `globalPrivacyControl`) | An opted-out visitor produces **zero** traffic: no beacon, no gtag load. |
+| Referrer reduced to its origin before sending | Full prior-page URLs (which can embed tokens/PII) never leave the page — only `https://example.com`-style origins. |
+| Prerender-aware (`document.prerendering` → count on activation) | Speculative page loads the visitor never sees don't inflate the numbers. |
 
 **What it never does:** no `innerHTML`, no `document.write`, no `eval`/`Function`,
 no reading of cookies, forms, or DOM content, no third-party hosts other than
@@ -471,9 +476,9 @@ exfiltration path** in the script itself.
 
 Residual notes:
 
-- It sends `document.referrer`, which can contain sensitive prior-page URLs.
-  The backend currently **discards** it (only `visitor_id`/`path` are stored).
-  If you ever store it, truncate to the referrer's *origin* first.
+- The referrer is truncated to its *origin* in the browser before it is ever
+  sent, and the backend discards even that (only `visitor_id`/`path` are
+  stored) — full prior-page URLs never cross the wire at all.
 - A client site with a Content-Security-Policy needs:
   `script-src https://your-poc-host` (+ `https://www.googletagmanager.com` if
   dual-sending) and `connect-src https://your-poc-host` (sendBeacon obeys
@@ -578,13 +583,16 @@ caution, not a flaw unique to self-hosting.
   worker if possible.
 - **Supply chain (the biggest real-world risk of this product class).** Whoever
   controls the `tracker.js` host can run arbitrary JS on every client site —
-  this is exactly the Polyfill.io 2024 incident and the Magecart playbook. The
-  PoC's defenses: the script is tiny and diff-able, and serving it from your
-  own locked-down origin beats a shared CDN account. For production: immutable
-  versioned URLs (`/tracker.v1.js`) so clients can pin, offer an SRI hash
-  (`integrity="sha384-…" crossorigin="anonymous"`) for clients who prefer
-  integrity over auto-updates, protect the deploy path (2FA, reviewed deploys),
-  and monitor the served bytes. Dependency side: Python deps are pinned,
+  this is exactly the Polyfill.io 2024 incident and the Magecart playbook.
+  Shipped defenses: the script is tiny and diff-able, and `GET /tracker.v1.js`
+  serves it as an **immutable, pinnable URL** — clients embed it with an SRI
+  hash (`integrity="sha384-…" crossorigin="anonymous"`; the script header
+  documents the exact `openssl` command), so a swapped payload simply refuses
+  to run in their visitors' browsers. Once published, v1 is frozen — breaking
+  changes ship as `/tracker.v2.js`, never as edits to v1. Still on the
+  operator: protect the deploy path (2FA, reviewed deploys), monitor the
+  served bytes, and prefer your own locked-down origin over a shared CDN
+  account. Dependency side: Python deps are pinned,
   `package-lock.json` is committed, `npm audit` was clean at commit time — keep
   both under periodic audit.
 - **Secrets & config.** `.gitignore` excludes `.env` and every key-file pattern
@@ -623,7 +631,9 @@ Before real business data, in priority order:
 4. **Secrets manager** for the SA key / CF token; per-tenant credentials;
    rotation schedule.
 5. **Registered site ids + Origin checks** on the beacon.
-6. Versioned `tracker.js` URL + published **SRI hash**.
+6. ~~Versioned `tracker.js` URL + published **SRI hash**~~ — shipped:
+   `/tracker.v1.js` is immutable; publish the hash the script header's
+   `openssl` command produces.
 7. **CSP on the dashboard** itself (`default-src 'self'` works — the built app
    has no external resources).
 8. Privacy docs: what the beacon stores (per-tab id, path), DPA template if

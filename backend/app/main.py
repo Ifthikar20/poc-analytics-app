@@ -185,6 +185,18 @@ async def tracker_js() -> FileResponse:
     )
 
 
+@app.get("/tracker.v1.js")
+async def tracker_js_versioned() -> FileResponse:
+    # The pinnable production URL: clients reference this with an SRI hash, so
+    # once published its content must be treated as frozen — breaking changes
+    # ship as /tracker.v2.js, never as edits to v1.
+    return FileResponse(
+        STATIC_DIR / "tracker.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @app.get("/demo")
 @app.get("/demo/{page}")
 async def demo_site(page: str = "") -> HTMLResponse:
